@@ -203,7 +203,7 @@ class ManagerPlati:
             if self.lista_plati:
                 self.id_curent = max([p.id_plata for p in self.lista_plati]) + 1
         except Exception as e:
-            pass
+            st.error(f"Eroare detaliată la încărcare: {e}")
 
 
 # --- 4. INTERFAȚA WEB (STREAMLIT) ---
@@ -404,4 +404,5 @@ elif meniu == "Resetare Lunară & Export":
         manager.actualizeaza_luna_noua()
         st.success("Toate statusurile au fost resetate! Ești gata pentru luna viitoare.")
         st.rerun()  # <--- ADAUGĂ LINIA ASTA
+
 
