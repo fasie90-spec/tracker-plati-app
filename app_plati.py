@@ -269,7 +269,7 @@ if 'manager' not in st.session_state:
 manager = st.session_state.manager
 
 st.sidebar.title(f"Salut, {st.session_state.user.capitalize()}!")
-meniu = st.sidebar.radio("Meniu", ["Adaugă Plată", "Vezi Plăți & Statistici", "Resetare Lunară & Export", "Logout"])
+meniu = st.sidebar.radio("Meniu", ["Vezi Plăți & Statistici", "Adaugă Plată", "Resetare Lunară & Export", "Logout"])
 
 if meniu == "Logout":
     st.session_state.logat = False
@@ -404,5 +404,6 @@ elif meniu == "Resetare Lunară & Export":
         manager.actualizeaza_luna_noua()
         st.success("Toate statusurile au fost resetate! Ești gata pentru luna viitoare.")
         st.rerun()  # <--- ADAUGĂ LINIA ASTA
+
 
 
