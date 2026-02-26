@@ -20,7 +20,7 @@ class LocatiePlata(Enum):
 
 class CategoriePlata(Enum):
     UTILITATI = "Utilitati" 
-    SUBSCRIPTII = "Subscriptii"
+    SUBSCRIPTII = "Abonamente"
     CREDIT = "Credit"
     DIVERSE = "Diverse"
 
@@ -100,7 +100,7 @@ def inregistrare(username, parola, client):
             sheet_principal.worksheet(username)
         except gspread.exceptions.WorksheetNotFound:
             noua_foaie = sheet_principal.add_worksheet(title=username, rows=100, cols=10)
-            noua_foaie.append_row(["ID", "Nume", "Suma", "Scadenta", "Categorie", "Locatie", "Valuta", "Status"])
+            noua_foaie.append_row(["ID", "Nume", "Suma", "Scadenta", "Categorie", "Modalitate de Plata", "Valuta", "Status"])
             
         return True, "Contul a fost creat cu succes!"
     except Exception as e:
@@ -162,21 +162,22 @@ class ManagerPlati:
     def get_total_ron(self, filtru_status=None):
         total = 0
         for plata in self.lista_plati:
-            if filtru_status and plata.status != filtru_status:
+            if filtru_status and plata.status.value != filtru_status.value:
                 continue
-            if plata.valuta == ValutaPlata.RON:
+                
+            if plata.valuta.value == ValutaPlata.RON.value:
                 total += plata.suma
-            elif plata.valuta == ValutaPlata.EUR:
+            elif plata.valuta.value == ValutaPlata.EUR.value:
                 total += plata.suma * 5.10
-            elif plata.valuta == ValutaPlata.USD:
+            elif plata.valuta.value == ValutaPlata.USD.value:
                 total += plata.suma * 4.33
-            elif plata.valuta == ValutaPlata.GBP:
+            elif plata.valuta.value == ValutaPlata.GBP.value:
                 total += plata.suma * 5.83
         return total
 
     # Logica de GSPREAD curata
     def salveaza_date(self):
-        date_pentru_tabel = [["ID", "Nume", "Suma", "Scadenta", "Categorie", "Locatie", "Valuta", "Status"]]
+        date_pentru_tabel = [["ID", "Nume", "Suma", "Scadenta", "Categorie", "Modalitate de Plata", "Valuta", "Status"]]
         for p in self.lista_plati:
             date_pentru_tabel.append([p.id_plata, p.nume_plata, float(p.suma), p.scadenta, p.categorie.value, p.locatie.value, p.valuta.value, p.status.value])
         
@@ -193,7 +194,7 @@ class ManagerPlati:
             for d in toate_randurile:
                 p = PlataRecurenta(
                     str(d["Nume"]), float(d["Suma"]), int(d["Scadenta"]),
-                    CategoriePlata(str(d["Categorie"])), LocatiePlata(str(d["Locatie"])),
+                    CategoriePlata(str(d["Categorie"])), LocatiePlata(str(d["Modalitate de Plata"])),
                     ValutaPlata(str(d["Valuta"])), StatusPlata(str(d["Status"]))
                 )
                 p.id_plata = int(d["ID"])
@@ -319,7 +320,8 @@ elif meniu == "Vezi Plăți & Statistici":
                 col1.write(f"**{plata.nume_plata}** ({plata.categorie.value})")
                 col2.write(f"{plata.suma} {plata.valuta.value}")
                 
-                if plata.status == StatusPlata.ACHITAT:
+               
+                if plata.status.value == StatusPlata.ACHITAT.value:
                     col3.success("ACHITAT")
                 else:
                     zile_ramase = plata.scadenta - ziua_azi
@@ -332,12 +334,13 @@ elif meniu == "Vezi Plăți & Statistici":
                     else:
                         col3.info(f"Scadență: ziua {plata.scadenta}")
 
-                if plata.status == StatusPlata.NEACHITAT:
-                    if col4.button("Achită", key=f"pay_{plata.id_plata}"):
+                
+                if plata.status.value == StatusPlata.NEACHITAT.value:
+                    if col4.button("💸 Achită", key=f"pay_{plata.id_plata}"):
                         manager.actualizeaza_status(plata.id_plata, StatusPlata.ACHITAT)
                         st.rerun()
                 else:
-                    if col4.button("Anulează", key=f"unpay_{plata.id_plata}"):
+                    if col4.button("↩️ Anulează", key=f"unpay_{plata.id_plata}"):
                         manager.actualizeaza_status(plata.id_plata, StatusPlata.NEACHITAT)
                         st.rerun()
 
@@ -372,7 +375,7 @@ elif meniu == "Resetare Lunară & Export":
     
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID", "Nume Plata", "Suma", "Valuta", "Scadenta", "Categorie", "Locatie", "Status"])
+    writer.writerow(["ID", "Nume Plata", "Suma", "Valuta", "Scadenta", "Categorie", "Modalitate de Plata", "Status"])
     
     for p in manager.lista_plati:
         writer.writerow([p.id_plata, p.nume_plata, p.suma, p.valuta.value, p.scadenta, p.categorie.value, p.locatie.value, p.status.value])
@@ -399,4 +402,5 @@ elif meniu == "Resetare Lunară & Export":
     st.warning("Atenție: Această acțiune va reseta toate plățile înapoi la 'NEACHITAT'.")
     if st.button("🔄 Resetează Statusurile"):
         manager.actualizeaza_luna_noua()
+
         st.success("Toate statusurile au fost resetate! Ești gata pentru luna viitoare.")
