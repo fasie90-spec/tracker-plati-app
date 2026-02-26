@@ -402,5 +402,6 @@ elif meniu == "Resetare Lunară & Export":
     st.warning("Atenție: Această acțiune va reseta toate plățile înapoi la 'NEACHITAT'.")
     if st.button("🔄 Resetează Statusurile"):
         manager.actualizeaza_luna_noua()
-
         st.success("Toate statusurile au fost resetate! Ești gata pentru luna viitoare.")
+        st.rerun()  # <--- ADAUGĂ LINIA ASTA
+
