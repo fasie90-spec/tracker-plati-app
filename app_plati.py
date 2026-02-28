@@ -409,7 +409,9 @@ elif meniu == "Vezi Plăți & Statistici":
                 "Scadență (Îndepărtate primele)", 
                 "Sumă (Crescător)", 
                 "Sumă (Descrescător)", 
-                "Nume (A-Z)"
+                "Nume (A-Z)",
+                "Status (Achitate primele)",
+                "Status (Neachitate primele)"
             ]
             sortare = st.selectbox("Ordonare după", optiuni_sortare)
 
@@ -436,7 +438,10 @@ elif meniu == "Vezi Plăți & Statistici":
         plati_afisate.sort(key=lambda x: x.suma, reverse=True)
     elif sortare == "Nume (A-Z)":
         plati_afisate.sort(key=lambda x: x.nume_plata.lower())
-    # ------------------------------------------
+    elif sortare == "Status (Achitate primele)":
+        plati_afisate.sort(key=lambda x: x.status.value)
+    elif sortare == "Status (Neachitate primele)":
+        plati_afisate.sort(key=lambda x: x.status.value, reverse=True)
 
     # --- AFIȘAREA PLĂȚILOR (ACUM FOLOSIM plati_afisate ÎN LOC DE manager.lista_plati) ---
     if not plati_afisate:
@@ -454,8 +459,15 @@ elif meniu == "Vezi Plăți & Statistici":
                 """, unsafe_allow_html=True)
                 
                 with col_edit:
-                    with st.popover("✏️"):
+                    # 1. Creăm o variabilă în session_state pentru a controla cheia popover-ului
+                    nume_cheie = f"pop_key_{plata.id_plata}"
+                    if nume_cheie not in st.session_state:
+                        st.session_state[nume_cheie] = 0
+
+                    # 2. Atribuim popover-ului o cheie dinamică
+                    with st.popover("✏️", key=f"pop_{plata.id_plata}_{st.session_state[nume_cheie]}"):
                         st.markdown(f"**Editează {plata.nume_plata}**")
+                        
                         with st.form(f"edit_form_{plata.id_plata}"):
                             n_nume = st.text_input("Nume", value=plata.nume_plata)
                             n_suma = st.number_input("Suma", value=float(plata.suma), step=10.0)
@@ -472,9 +484,13 @@ elif meniu == "Vezi Plăți & Statistici":
                             n_loc = st.selectbox("Locație", l_list, index=l_list.index(plata.locatie.value))
                             
                             btn_salveaza = st.form_submit_button("Salvează Modificările", use_container_width=True)
+                            
                             if btn_salveaza:
                                 manager.editeaza_plata(plata.id_plata, n_nume, n_suma, n_scadenta, CategoriePlata(n_cat), LocatiePlata(n_loc), ValutaPlata(n_valuta))
                                 st.session_state.toast_mesaj = "Datele au fost actualizate cu succes!"
+                                
+                                # 3. MAGIA AICI: Modificăm cheia chiar înainte de rerun!
+                                st.session_state[nume_cheie] += 1
                                 st.rerun()
                                 
                         if st.button("🗑️ Șterge plată", key=f"del_{plata.id_plata}", type="primary", use_container_width=True):
@@ -548,6 +564,7 @@ elif meniu == "Resetare Lunară & Export":
         manager.actualizeaza_luna_noua()
         st.session_state.toast_mesaj = "Toate statusurile au fost resetate!"
         st.rerun()
+
 
 
 
