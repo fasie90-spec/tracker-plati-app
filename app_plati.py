@@ -156,33 +156,45 @@ if meniu == "📊 Dashboard Analytics":
         
     st.divider()
 
-    # 📊 GRAFIC DONUT CHART MODERN
-    st.subheader("🍕 Distribuția Cheltuielilor")
+    # 📊 GRAFIC DONUT CHART MODERN (DATE AGREGATE)
+    st.subheader("🍕 Distribuția Cheltuielilor Reale")
     date_grafic = {"Categorie": [], "Suma": []}
     
+    # 1. Extragem facturile ACHITATE
     for p in mgr_plati.lista_plati:
-        date_grafic["Categorie"].append(p.categorie)
-        suma_ron = p.suma * mgr_plati.rate_valutare.get(p.valuta.value, 1)
-        date_grafic["Suma"].append(suma_ron)
+        if p.status.value == "Achitat":
+            suma_ron = p.suma * mgr_plati.rate_valutare.get(p.valuta.value, 1)
+            date_grafic["Categorie"].append(f"Factură: {p.categorie}")
+            date_grafic["Suma"].append(suma_ron)
+            
+    # 2. Extragem cheltuielile zilnice din Portofel (doar luna curentă)
+    luna_curenta = datetime.now().month
+    for t in mgr_tranz.lista_tranzactii:
+        try:
+            luna_t = datetime.strptime(t.data, "%d-%m-%Y").month
+        except:
+            luna_t = luna_curenta # Fallback de siguranță
+            
+        if t.tip == TipTranzactie.CHELTUIALA and luna_t == luna_curenta:
+            # Nu dublăm facturile care s-au scăzut deja automat în portofel
+            if not t.categorie.startswith("Plată factură: "):
+                date_grafic["Categorie"].append(t.categorie)
+                date_grafic["Suma"].append(t.suma)
         
     if date_grafic["Suma"]:
         df = pd.DataFrame(date_grafic).groupby("Categorie")["Suma"].sum().reset_index()
+        # Sortăm descrescător ca felia cea mai mare să fie prima
+        df = df.sort_values(by="Suma", ascending=False)
+        
         fig = px.pie(df, values='Suma', names='Categorie', hole=0.6, 
                      color_discrete_sequence=px.colors.qualitative.Pastel)
-        fig.update_traces(textposition='inside', textinfo='percent')
-        fig.update_layout(showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5))
+        fig.update_traces(textposition='inside', textinfo='percent',
+                          hovertemplate="<b>%{label}</b><br>Suma: %{value:.2f} RON<br>Procent: %{percent}")
+        fig.update_layout(showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5), margin=dict(t=10, b=50, l=0, r=0))
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.write("Nu există date pentru grafic.")
+        st.info("Nu există cheltuieli înregistrate luna aceasta.")
 
-    st.divider()
-    st.subheader("🏁 Închidere Lună")
-    with st.expander("🔄 Resetare pentru Lună Nouă"):
-        st.warning("Atenție: Această acțiune va reseta toate facturile la statusul 'NEACHITAT'.")
-        if st.button("Confirmă Resetarea Facturilor", use_container_width=True, type="primary"):
-            mgr_plati.actualizeaza_luna_noua()
-            st.session_state.toast_mesaj = "Toate facturile au fost resetate!"
-            st.rerun()
 
 # ==========================================
 # 💳 PAGINA 2: FACTURI
@@ -415,6 +427,7 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
 
 
 
