@@ -404,16 +404,31 @@ elif meniu == "Vezi Plăți & Statistici":
             optiuni_cat = ["Toate"] + [c.value for c in CategoriePlata]
             filtru_cat = st.selectbox("Categorie", optiuni_cat)
         with f3:
-            optiuni_sortare = [
-                "Scadență (Apropiate primele)", 
-                "Scadență (Îndepărtate primele)", 
-                "Sumă (Crescător)", 
-                "Sumă (Descrescător)", 
-                "Nume (A-Z)",
-                "Status (Achitate primele)",
-                "Status (Neachitate primele)"
-            ]
-            sortare = st.selectbox("Ordonare după", optiuni_sortare)
+        optiuni_sortare = [
+            "Scadență (Apropiate primele)", 
+            "Scadență (Îndepărtate primele)", 
+            "Sumă (Crescător)", 
+            "Sumă (Descrescător)", 
+            "Nume (A-Z)",
+            "Status (Achitate primele)",
+            "Status (Neachitate primele)"
+        ]
+        
+        # 1. Citim preferința din browser (dacă există), altfel punem default prima opțiune
+        sortare_salvata = cookie_manager.get("pref_sortare")
+        if sortare_salvata not in optiuni_sortare:
+            sortare_salvata = optiuni_sortare[0]
+            
+        # 2. Aflăm la ce poziție se află opțiunea salvată în lista noastră
+        index_curent = optiuni_sortare.index(sortare_salvata)
+
+        # 3. Afișăm dropdown-ul selectat automat pe preferința utilizatorului
+        sortare = st.selectbox("Ordonare după", optiuni_sortare, index=index_curent)
+
+        # 4. Dacă utilizatorul alege altceva, salvăm noul cookie (valabil 1 an) și dăm rerun
+        if sortare != sortare_salvata:
+            cookie_manager.set("pref_sortare", sortare, key="set_sortare_cookie", expires_at=datetime.now() + timedelta(days=365))
+            st.rerun()
 
     # 1. Copiem lista originală pentru a nu o strica
     plati_afisate = manager.lista_plati.copy()
@@ -561,6 +576,7 @@ elif meniu == "Resetare Lunară & Export":
         manager.actualizeaza_luna_noua()
         st.session_state.toast_mesaj = "Toate statusurile au fost resetate!"
         st.rerun()
+
 
 
 
