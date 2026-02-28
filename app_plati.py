@@ -9,6 +9,7 @@ import gspread
 from enum import Enum
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime, timedelta
 
 # --- LIBRĂRII NOI PENTRU SECURITATE ȘI COOKIES ---
 from cryptography.fernet import Fernet
@@ -312,9 +313,11 @@ if not st.session_state.logat:
                     st.session_state.user = user_login.lower()
                     st.session_state.parola = pass_login
                     
-                    # Salvăm Cookie-ul ca să nu te delogheze la refresh (expiră în 30 de zile)
-                    cookie_manager.set("auth_token", f"{user_login.lower()}::{pass_login}", key="set_auth", expires_at=datetime.now().replace(day=28))
-                    st.rerun()
+                    # Salvăm Cookie-ul (expiră în fix 30 de zile)
+                    data_expirare = datetime.now() + timedelta(days=30)
+                    cookie_manager.set("auth_token", f"{user_login.lower()}::{pass_login}", key="set_auth", expires_at=data_expirare)
+                    
+                    # AM ȘTERS st.rerun() DE AICI!
                 else:
                     st.error("Utilizator inexistent sau parolă incorectă!")
                     
@@ -338,8 +341,9 @@ if not st.session_state.logat:
                     else:
                         st.error(mesaj)
                         
-    st.stop()
-
+    # Oprim codul AICI doar dacă utilizatorul încă NU s-a logat cu succes
+    if not st.session_state.logat:
+        st.stop()
 
 # --- Aplicatia Principala ---
 if 'manager' not in st.session_state:
@@ -396,15 +400,47 @@ elif meniu == "Vezi Plăți & Statistici":
     else:
         for plata in manager.lista_plati:
             with st.container(border=True):
-                col1, col2, col3, col4 = st.columns([2.5, 1, 1.5, 1])
+                # Am adăugat o coloană mică (col_edit) fix lângă nume
+                col1, col_edit, col2, col3, col4 = st.columns([2, 0.5, 1, 1.5, 1])
                 
-                # Afișare Restilizată cu HTML/CSS
                 col1.markdown(f"""
                 <div style='line-height: 1.3;'>
                     <span style='font-size: 1.35rem; font-weight: 800; color: #2e86c1;'>{plata.nume_plata}</span><br>
                     <span style='font-size: 0.85rem; color: gray;'>📂 {plata.categorie.value} | 📍 {plata.locatie.value}</span>
                 </div>
                 """, unsafe_allow_html=True)
+                
+                # --- AICI E NOUL BUTON DE EDITARE ---
+                with col_edit:
+                    with st.popover("✏️"):
+                        st.markdown(f"**Editează {plata.nume_plata}**")
+                        with st.form(f"edit_form_{plata.id_plata}"):
+                            n_nume = st.text_input("Nume", value=plata.nume_plata)
+                            n_suma = st.number_input("Suma", value=float(plata.suma), step=10.0)
+                            
+                            v_list = [v.value for v in ValutaPlata]
+                            n_valuta = st.selectbox("Valuta", v_list, index=v_list.index(plata.valuta.value))
+                            
+                            n_scadenta = st.number_input("Ziua scadenței", value=plata.scadenta, min_value=1, max_value=31)
+                            
+                            c_list = [c.value for c in CategoriePlata]
+                            n_cat = st.selectbox("Categorie", c_list, index=c_list.index(plata.categorie.value))
+                            
+                            l_list = [l.value for l in LocatiePlata]
+                            n_loc = st.selectbox("Locație", l_list, index=l_list.index(plata.locatie.value))
+                            
+                            btn_salveaza = st.form_submit_button("Salvează Modificările", use_container_width=True)
+                            if btn_salveaza:
+                                manager.editeaza_plata(plata.id_plata, n_nume, n_suma, n_scadenta, CategoriePlata(n_cat), LocatiePlata(n_loc), ValutaPlata(n_valuta))
+                                st.session_state.toast_mesaj = "Datele au fost actualizate cu succes!"
+                                st.rerun()
+                                
+                        # Butonul de ștergere e separat, sub formular
+                        if st.button("🗑️ Șterge plată", key=f"del_{plata.id_plata}", type="primary", use_container_width=True):
+                            manager.sterge_plata(plata.id_plata)
+                            st.session_state.toast_mesaj = "Plata a fost ștearsă!"
+                            st.rerun()
+                # ------------------------------------
                 
                 col2.markdown(f"""
                 <div style='margin-top: 10px;'>
@@ -434,33 +470,6 @@ elif meniu == "Vezi Plăți & Statistici":
                 else:
                     if col4.button("↩️ Anulează", key=f"unpay_{plata.id_plata}"):
                         manager.actualizeaza_status(plata.id_plata, StatusPlata.NEACHITAT)
-                        st.rerun()
-
-                # Expander-ul de Editare
-                with st.expander("✏️ Editează / Șterge"):
-                    with st.form(f"edit_form_{plata.id_plata}"):
-                        e1, e2 = st.columns(2)
-                        with e1:
-                            n_nume = st.text_input("Nume", value=plata.nume_plata)
-                            n_suma = st.number_input("Suma", value=float(plata.suma), step=10.0)
-                            v_list = [v.value for v in ValutaPlata]
-                            n_valuta = st.selectbox("Valuta", v_list, index=v_list.index(plata.valuta.value))
-                        with e2:
-                            n_scadenta = st.number_input("Ziua", value=plata.scadenta, min_value=1, max_value=31)
-                            c_list = [c.value for c in CategoriePlata]
-                            n_cat = st.selectbox("Categorie", c_list, index=c_list.index(plata.categorie.value))
-                            l_list = [l.value for l in LocatiePlata]
-                            n_loc = st.selectbox("Locație", l_list, index=l_list.index(plata.locatie.value))
-                        
-                        btn_salveaza = st.form_submit_button("Salvează Modificările")
-                        if btn_salveaza:
-                            manager.editeaza_plata(plata.id_plata, n_nume, n_suma, n_scadenta, CategoriePlata(n_cat), LocatiePlata(n_loc), ValutaPlata(n_valuta))
-                            st.session_state.toast_mesaj = "Datele au fost actualizate cu succes!"
-                            st.rerun() # Aceasta actiune ascunde si meniul de editare nativ
-                            
-                    if st.button("🗑️ Șterge definitiv această plată", key=f"del_{plata.id_plata}"):
-                        manager.sterge_plata(plata.id_plata)
-                        st.session_state.toast_mesaj = "Plata a fost ștearsă!"
                         st.rerun()
 
 # --- PAGINA 3: RESETARE LUNARĂ & EXPORT CSV ---
@@ -499,4 +508,5 @@ elif meniu == "Resetare Lunară & Export":
         manager.actualizeaza_luna_noua()
         st.session_state.toast_mesaj = "Toate statusurile au fost resetate!"
         st.rerun()
+
 
