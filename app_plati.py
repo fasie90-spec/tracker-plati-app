@@ -428,7 +428,7 @@ elif meniu == "Vezi Plăți & Statistici":
         # 4. Dacă utilizatorul alege altceva, salvăm noul cookie (valabil 1 an) și dăm rerun
         if sortare != sortare_salvata:
             cookie_manager.set("pref_sortare", sortare, key="set_sortare_cookie", expires_at=datetime.now() + timedelta(days=365))
-            st.rerun()
+            
 
     # 1. Copiem lista originală pentru a nu o strica
     plati_afisate = manager.lista_plati.copy()
@@ -576,6 +576,7 @@ elif meniu == "Resetare Lunară & Export":
         manager.actualizeaza_luna_noua()
         st.session_state.toast_mesaj = "Toate statusurile au fost resetate!"
         st.rerun()
+
 
 
 
