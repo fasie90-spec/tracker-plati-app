@@ -233,12 +233,24 @@ elif meniu == "💳 Facturi & Scadențe":
 
             if plata.status.value == "Neachitat":
                 if c_act.button("💸 Achită", key=f"pay_{plata.id_plata}", use_container_width=True):
+                    # 1. Marcăm factura ca achitată
                     mgr_plati.actualizeaza_status(plata.id_plata, StatusPlata.ACHITAT)
-                    st.session_state.toast_mesaj = f"Achitat!"
+                    
+                    # 2. MAGIA: Comunicarea între baze de date! 
+                    # Calculăm suma în RON (în caz că factura e în EUR/USD)
+                    suma_ron = plata.suma * mgr_plati.rate_valutare.get(plata.valuta.value, 1)
+                    data_azi = datetime.now().strftime("%d-%m-%Y")
+                    detalii = f"Plată factură: {plata.nume_plata}"
+                    
+                    # Înregistrăm automat o cheltuială în portofel
+                    mgr_tranz.adauga_tranzactie(suma_ron, detalii, data_azi, TipTranzactie.CHELTUIALA)
+                    
+                    st.session_state.toast_mesaj = f"Achitat! Au fost retrași {suma_ron:.2f} RON din portofel."
                     st.rerun()
             else:
                 if c_act.button("↩️ Anulează", key=f"unpay_{plata.id_plata}", use_container_width=True):
                     mgr_plati.actualizeaza_status(plata.id_plata, StatusPlata.NEACHITAT)
+                    st.session_state.toast_mesaj = "Status anulat! (Atenție: Banii nu au fost returnați automat în portofel)"
                     st.rerun()
 
 # ==========================================
@@ -280,3 +292,4 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}", help="Șterge tranzacție"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
