@@ -383,19 +383,6 @@ if meniu == "Adaugă Plată":
                 st.session_state.toast_mesaj = f"Plata {nume} a fost adăugată!"
                 st.rerun()
 
-E perfect normal să te încurci aici! Când adaugi logica de filtrare, practic trebuie să interceptezi lista de plăți înainte ca aplicația să înceapă să o deseneze pe ecran (înainte de acel for plata in...).
-
-Ca viitor Python Developer, e important să vizualizezi fluxul datelor:
-
-Iei datele brute (manager.lista_plati).
-
-Le treci printr-o "sită" (filtrele și sortarea).
-
-Rezultatul (plati_afisate) îl trimiți către interfața grafică să fie afișat.
-
-Pentru a face lucrurile super clare, înlocuiește complet toată PAGINA 2 a ta cu codul de mai jos. Am integrat eu filtrele exact unde trebuie:
-
-Python
 # --- PAGINA 2: VEZI PLĂȚI ---
 elif meniu == "Vezi Plăți & Statistici":
     st.header("📊 Situația Ta Financiară")
@@ -561,6 +548,7 @@ elif meniu == "Resetare Lunară & Export":
         manager.actualizeaza_luna_noua()
         st.session_state.toast_mesaj = "Toate statusurile au fost resetate!"
         st.rerun()
+
 
 
 
