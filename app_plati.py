@@ -188,7 +188,7 @@ if meniu == "📊 Dashboard Analytics":
 # 💳 PAGINA 2: FACTURI
 # ==========================================
 elif meniu == "💳 Facturi & Scadențe":
-    st.header("💳 Gestionare Facturi Recurente")
+    st.header("💳 Gestionare Cheltuieli Recurente")
     
     # 1. BARA DE PROGRES (RESTURATĂ CU DETALII)
     total_facturi = mgr_plati.get_total_ron()
@@ -415,6 +415,7 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
 
 
 
