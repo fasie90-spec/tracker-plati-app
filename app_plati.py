@@ -395,6 +395,57 @@ elif meniu == "Vezi Plăți & Statistici":
     st.divider()
     ziua_azi = datetime.now().day
 
+    # --- ZONA DE FILTRARE ȘI SORTARE ---
+    with st.expander("🔎 Filtrare și Ordonare", expanded=False):
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            filtru_status = st.selectbox("Status", ["Toate", "Doar Neachitate", "Doar Achitate"])
+        with f2:
+            optiuni_cat = ["Toate"] + [c.value for c in CategoriePlata]
+            filtru_cat = st.selectbox("Categorie", optiuni_cat)
+        with f3:
+            optiuni_sortare = [
+                "Scadență (Apropiate primele)", 
+                "Scadență (Îndepărtate primele)", 
+                "Sumă (Crescător)", 
+                "Sumă (Descrescător)", 
+                "Nume (A-Z)"
+            ]
+            sortare = st.selectbox("Ordonare după", optiuni_sortare)
+
+    # 1. Copiem lista originală pentru a nu o modifica direct
+    plati_afisate = manager.lista_plati.copy()
+
+    # 2. Aplicăm Filtrarea
+    if filtru_status == "Doar Neachitate":
+        plati_afisate = [p for p in plati_afisate if p.status.value == StatusPlata.NEACHITAT.value]
+    elif filtru_status == "Doar Achitate":
+        plati_afisate = [p for p in plati_afisate if p.status.value == StatusPlata.ACHITAT.value]
+
+    if filtru_cat != "Toate":
+        plati_afisate = [p for p in plati_afisate if p.categorie.value == filtru_cat]
+
+    # 3. Aplicăm Sortarea
+    if sortare == "Scadență (Apropiate primele)":
+        plati_afisate.sort(key=lambda x: x.scadenta)
+    elif sortare == "Scadență (Îndepărtate primele)":
+        plati_afisate.sort(key=lambda x: x.scadenta, reverse=True)
+    elif sortare == "Sumă (Crescător)":
+        plati_afisate.sort(key=lambda x: x.suma)
+    elif sortare == "Sumă (Descrescător)":
+        plati_afisate.sort(key=lambda x: x.suma, reverse=True)
+    elif sortare == "Nume (A-Z)":
+        plati_afisate.sort(key=lambda x: x.nume_plata.lower())
+
+    # --- AFIȘAREA LISTEI PROCESATE ---
+    if not plati_afisate:
+        st.info("Nu s-a găsit nicio plată conform filtrelor selectate.")
+    else:
+        # ATENȚIE: Aici schimbăm variabila din manager.lista_plati în plati_afisate
+        for plata in plati_afisate:
+            with st.container(border=True):
+                # ... (restul codului tău cu coloanele și butoanele rămâne absolut la fel)
+
     if not manager.lista_plati:
         st.info("Nu ai facturi de plată.")
     else:
@@ -508,5 +559,6 @@ elif meniu == "Resetare Lunară & Export":
         manager.actualizeaza_luna_noua()
         st.session_state.toast_mesaj = "Toate statusurile au fost resetate!"
         st.rerun()
+
 
 
