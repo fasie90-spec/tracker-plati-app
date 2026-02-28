@@ -121,7 +121,8 @@ if meniu == "📊 Dashboard Analytics":
 
     # --- SECTIUNE ECONOMII (SEIF PERSONALIZAT) ---
     target_key = f"target_eco_{st.session_state.user}"
-    target_eco = cookie_manager.get(target_key)
+    # Caută instant în sesiune; dacă nu e acolo, ia-l din cookie
+    target_eco = st.session_state.get(target_key, cookie_manager.get(target_key))
     economii_totale = mgr_tranz.calculeaza_economii_totale()
 
     st.subheader("🏦 Seiful Meu de Economii")
@@ -146,7 +147,7 @@ if meniu == "📊 Dashboard Analytics":
     total_facturi = mgr_plati.get_total_ron()
     total_achitat = mgr_plati.get_total_ron(StatusPlata.ACHITAT)
     
-    st.subheader("🏁 Progres Achitare Facturi")
+    st.subheader("🏁 Progres Achitare Cheltuieli Recurente")
     if total_facturi > 0:
         procent = int((total_achitat / total_facturi) * 100)
         st.progress(procent / 100, text=f"Ai achitat {procent}% din facturi ({total_achitat:.0f} / {total_facturi:.0f} RON)")
@@ -357,7 +358,7 @@ elif meniu == "💰 Portofel (Cashflow)":
                 st.rerun()
     # --- GESTIONARE SEIF ---
     target_key = f"target_eco_{st.session_state.user}"
-    target_actual = cookie_manager.get(target_key)
+    target_actual = st.session_state.get(target_key, cookie_manager.get(target_key))
     target_actual = float(target_actual) if target_actual else 0.0
     
     with st.expander("🏦 Gestionează Seiful de Economii", expanded=False):
@@ -367,9 +368,11 @@ elif meniu == "💰 Portofel (Cashflow)":
         with c_set:
             nou_target = st.number_input("Setează Target (RON)", min_value=0.0, value=target_actual, step=100.0)
             if st.button("💾 Salvează Target", use_container_width=True):
+                # 1. Oglindim instant în memorie pentru viteză
+                st.session_state[target_key] = str(nou_target)
+                # 2. Trimitem cookie-ul către browser (fără să mai dăm rerun ca să aibă timp să-l scrie)
                 cookie_manager.set(target_key, str(nou_target), key="set_target", expires_at=datetime.now() + timedelta(days=365))
-                st.session_state.toast_mesaj = "Obiectivul de economii a fost actualizat!"
-                st.rerun()
+                st.toast("Obiectivul a fost salvat cu succes!", icon="✅")
                 
         with c_get:
             suma_ret = st.number_input("Suma de retras (RON)", min_value=0.0, step=50.0)
@@ -412,6 +415,7 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
 
 
 
