@@ -140,6 +140,15 @@ if meniu == "📊 Dashboard Analytics":
     else:
         st.write("Nu există date suficiente pentru grafic.")
 
+    st.divider()
+    st.subheader("🏁 Închidere Lună")
+    with st.expander("🔄 Resetare pentru Lună Nouă"):
+        st.warning("Atenție: Această acțiune va reseta toate facturile la statusul 'NEACHITAT'. Tranzacțiile din portofel (venituri/cheltuieli) nu vor fi șterse.")
+        if st.button("Confirmă Resetarea Facturilor", use_container_width=True, type="primary"):
+            mgr_plati.actualizeaza_luna_noua()
+            st.session_state.toast_mesaj = "Toate facturile au fost resetate pentru luna nouă!"
+            st.rerun()
+
 # ==========================================
 # 💳 PAGINA 2: FACTURI
 # ==========================================
@@ -312,6 +321,7 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}", help="Șterge tranzacție"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
 
 
 
