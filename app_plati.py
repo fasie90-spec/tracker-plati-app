@@ -308,7 +308,17 @@ elif meniu == "💳 Facturi & Scadențe":
                             st.rerun()
                     else:
                         if st.button("↩️ Anulează", key=f"un_{p.id_plata}", use_container_width=True):
+                            # 1. Schimbăm statusul facturii înapoi
                             mgr_plati.actualizeaza_status(p.id_plata, StatusPlata.NEACHITAT)
+                            
+                            # 2. Returnăm banii: căutăm și ștergem tranzacția din portofel
+                            nume_tinta = f"Factură: {p.nume_plata}"
+                            for t in reversed(mgr_tranz.lista_tranzactii):
+                                if t.categorie == nume_tinta and t.tip == TipTranzactie.CHELTUIALA:
+                                    mgr_tranz.sterge_tranzactie(t.id_tranzactie)
+                                    break # Ne oprim după ce o ștergem pe cea mai recentă
+                            
+                            st.session_state.toast_mesaj = f"Anulat! Banii pentru '{p.nume_plata}' au revenit în portofel."
                             st.rerun()
 
 # ==========================================
@@ -349,4 +359,5 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
 
