@@ -176,13 +176,24 @@ if meniu == "📊 Dashboard Analytics":
 elif meniu == "💳 Facturi & Scadențe":
     st.header("💳 Gestionare Facturi Recurente")
     
-    # 1. BARA DE PROGRES
+    # 1. BARA DE PROGRES (RESTURATĂ CU DETALII)
     total_facturi = mgr_plati.get_total_ron()
     total_achitat = mgr_plati.get_total_ron(StatusPlata.ACHITAT)
+    
     if total_facturi > 0:
         procent = int((total_achitat / total_facturi) * 100)
-        st.write(f"**Progres Lună Curentă:** {procent}% achitat")
-        st.progress(procent / 100)
+        # Alegem un emoji dinamic
+        emoji = "🔍" if procent < 50 else "⚡" if procent < 100 else "✅"
+        
+        st.write(f"**Progres Cheltuieli Recurente Lună Curentă:** {procent}%")
+        
+        # Inserăm textul detaliat direct în bara de progres
+        st.progress(
+            procent / 100, 
+            text=f"{emoji} Ai achitat {total_achitat:.2f} RON din totalul de {total_facturi:.2f} RON"
+        )
+    else:
+        st.info("Adaugă prima ta cheltuiala recurenta pentru a vedea progresul.")
     
     st.divider()
     ziua_azi = datetime.now().day
@@ -338,3 +349,4 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
