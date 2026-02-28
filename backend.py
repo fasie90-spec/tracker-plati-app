@@ -175,7 +175,8 @@ class ManagerPlati:
     def get_total_ron(self, filtru_status=None):
         total = 0
         for p in self.lista_plati:
-            if filtru_status and p.status != filtru_status:
+            # Comparare sigură prin .value pentru a evita eroarea de tip Enum
+            if filtru_status and p.status.value != filtru_status.value:
                 continue
             total += p.suma * self.rate_valutare.get(p.valuta.value, 1)
         return total
