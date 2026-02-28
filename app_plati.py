@@ -246,37 +246,71 @@ elif meniu == "💳 Facturi & Scadențe":
             st.session_state.toast_mesaj = "Ștearsă!"
             st.rerun()
 
-    # 6. AFIȘARE LISTA CARDURI
+    # 6. AFIȘARE LISTA CARDURI (DESIGN RESTAURAT)
     if not plati:
         st.info("Nicio factură găsită.")
     else:
         for p in plati:
             with st.container(border=True):
-                c_n, c_e = st.columns([4, 1])
-                c_n.markdown(f"**{p.nume_plata}** \n<small>{p.categorie.value} | {p.locatie.value}</small>", unsafe_allow_html=True)
-                if c_e.button("✏️", key=f"e_{p.id_plata}"): modal_editare(p)
+                # --- RÂNDUL 1: NUME (Stânga) și EDIT (Dreapta) ---
+                col_nume, col_edit = st.columns([4, 1])
                 
-                st.divider()
-                c_s, c_st, c_a = st.columns([1.5, 1.5, 1])
-                c_s.markdown(f"**{p.suma} {p.valuta.value}**")
+                with col_nume:
+                    st.markdown(f"""
+                        <div style='line-height: 1.2;'>
+                            <div style='font-size: 1.4rem; font-weight: 800; color: #2e86c1;'>{p.nume_plata}</div>
+                            <div style='font-size: 0.85rem; color: #7f8c8d; margin-top: 2px;'>
+                                📂 {p.categorie.value} &nbsp;&nbsp; | &nbsp;&nbsp; 📍 {p.locatie.value}
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
                 
-                if p.status.value == "Achitat":
-                    c_st.success("✅ Achitat")
-                    if c_a.button("↩️", key=f"un_{p.id_plata}"):
-                        mgr_plati.actualizeaza_status(p.id_plata, StatusPlata.NEACHITAT)
-                        st.rerun()
-                else:
-                    zr = p.scadenta - ziua_azi
-                    if zr < 0: c_st.error(f"🚨 -{abs(zr)} zile")
-                    elif zr == 0: c_st.error("⚠️ Azi")
-                    else: c_st.info(f"📅 Ziua {p.scadenta}")
-                    
-                    if c_a.button("💸", key=f"py_{p.id_plata}"):
-                        mgr_plati.actualizeaza_status(p.id_plata, StatusPlata.ACHITAT)
-                        s_ron = p.suma * mgr_plati.rate_valutare.get(p.valuta.value, 1)
-                        mgr_tranz.adauga_tranzactie(s_ron, f"Factură: {p.nume_plata}", datetime.now().strftime("%d-%m-%Y"), TipTranzactie.CHELTUIALA)
-                        st.session_state.toast_mesaj = f"Achitat {s_ron:.2f} RON!"
-                        st.rerun()
+                with col_edit:
+                    # Butonul de editare aliniat la dreapta
+                    st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
+                    if st.button("✏️", key=f"e_{p.id_plata}", help="Editează"):
+                        modal_editare(p)
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                st.divider() # O linie separatoare fină
+
+                # --- RÂNDUL 2: SUMĂ, STATUS și ACȚIUNE ---
+                c_suma, c_status, c_actiune = st.columns([1.4, 1.4, 1.2])
+                
+                with c_suma:
+                    st.markdown(f"""
+                        <div style='margin-top: 5px;'>
+                            <span style='font-size: 1.3rem; font-weight: 700;'>{p.suma}</span>
+                            <span style='font-size: 0.9rem; color: #34495e;'>{p.valuta.value}</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+                
+                with c_status:
+                    if p.status.value == "Achitat":
+                        st.success("✅ ACHITAT")
+                    else:
+                        zr = p.scadenta - ziua_azi
+                        if zr < 0:
+                            st.error(f"🚨 -{abs(zr)} zile")
+                        elif zr == 0:
+                            st.error("⚠️ AZI")
+                        elif 1 <= zr <= 3:
+                            st.warning(f"⏳ {zr} zile")
+                        else:
+                            st.info(f"📅 Ziua {p.scadenta}")
+
+                with c_actiune:
+                    if p.status.value == "Neachitat":
+                        if st.button("💸 Achită", key=f"py_{p.id_plata}", use_container_width=True, type="primary"):
+                            mgr_plati.actualizeaza_status(p.id_plata, StatusPlata.ACHITAT)
+                            s_ron = p.suma * mgr_plati.rate_valutare.get(p.valuta.value, 1)
+                            mgr_tranz.adauga_tranzactie(s_ron, f"Factură: {p.nume_plata}", datetime.now().strftime("%d-%m-%Y"), TipTranzactie.CHELTUIALA)
+                            st.session_state.toast_mesaj = f"Achitat {s_ron:.2f} RON!"
+                            st.rerun()
+                    else:
+                        if st.button("↩️ Anulează", key=f"un_{p.id_plata}", use_container_width=True):
+                            mgr_plati.actualizeaza_status(p.id_plata, StatusPlata.NEACHITAT)
+                            st.rerun()
 
     # Modalul pentru Editare Plăți
     @st.dialog("✏️ Editează Plata")
@@ -424,6 +458,7 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}", help="Șterge tranzacție"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
 
 
 
