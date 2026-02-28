@@ -5,3 +5,4 @@ cryptography
 extra-streamlit-components
 plotly
 requests
+pandas
