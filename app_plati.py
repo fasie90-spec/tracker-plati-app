@@ -155,15 +155,13 @@ if meniu == "📊 Dashboard Analytics":
 elif meniu == "💳 Facturi & Scadențe":
     st.header("💳 Gestionare Facturi Recurente")
     
-    # --- BARA DE PROGRES (ADAUGATĂ AICI) ---
+    # 1. BARA DE PROGRES
     total_facturi = mgr_plati.get_total_ron()
     total_achitat = mgr_plati.get_total_ron(StatusPlata.ACHITAT)
     
     if total_facturi > 0:
         procent = int((total_achitat / total_facturi) * 100)
-        # Alegem o culoare dinamică în funcție de progres
         culoare = "🔍" if procent < 50 else "⚡" if procent < 100 else "✅"
-        
         st.write(f"**Progres Lună Curentă:** {procent}% achitat")
         st.progress(procent / 100)
         st.caption(f"{culoare} Ai achitat {total_achitat:.2f} RON dintr-un total de {total_facturi:.2f} RON")
@@ -171,9 +169,114 @@ elif meniu == "💳 Facturi & Scadențe":
         st.info("Adaugă prima ta factură pentru a vedea progresul.")
     
     st.divider()
-    
-    # Restul codului tău (ziua_azi, expander-ul de adăugare, etc.) rămâne la fel...
     ziua_azi = datetime.now().day
+
+    # 2. BUTONUL DE ADĂUGARE (Care dispăruse)
+    with st.expander("➕ Adaugă Factură Nouă"):
+        with st.form("form_adaugare_plata"):
+            col1, col2 = st.columns(2)
+            n_nume = col1.text_input("Nume Plată")
+            n_suma = col1.number_input("Suma", min_value=0.0, step=10.0)
+            n_valuta = col1.selectbox("Valuta", [v.value for v in ValutaPlata])
+            n_scadenta = col2.number_input("Ziua (1-31)", min_value=1, max_value=31)
+            n_cat = col2.selectbox("Categorie", [c.value for c in CategoriePlata])
+            n_loc = col2.selectbox("Locație", [l.value for l in LocatiePlata])
+            
+            if st.form_submit_button("Salvează Factura", use_container_width=True):
+                if not n_nume:
+                    st.error("Numele este obligatoriu!")
+                else:
+                    mgr_plati.adauga_plata(n_nume, n_suma, n_scadenta, CategoriePlata(n_cat), LocatiePlata(n_loc), ValutaPlata(n_valuta))
+                    st.session_state.toast_mesaj = "Factură adăugată!"
+                    st.rerun()
+
+    # 3. FILTRARE ȘI ORDONARE
+    with st.expander("🔎 Filtrare și Ordonare", expanded=False):
+        f1, f2, f3 = st.columns(3)
+        f_stat = f1.selectbox("Status", ["Toate", "Doar Neachitate", "Doar Achitate"])
+        f_cat = f2.selectbox("Categorie", ["Toate"] + [c.value for c in CategoriePlata])
+        
+        optiuni_sortare = [
+            "Scadență (Apropiate)", "Scadență (Îndepărtate)", 
+            "Sumă (Crescător)", "Sumă (Descrescător)", "Nume (A-Z)",
+            "Status (Neachitate primele)", "Status (Achitate primele)"
+        ]
+        
+        sort_salvat = cookie_manager.get("pref_sortare")
+        index_pref = optiuni_sortare.index(sort_salvat) if sort_salvat in optiuni_sortare else 0
+        sortare = f3.selectbox("Ordonare după", optiuni_sortare, index=index_pref)
+        
+        if sortare != sort_salvat:
+            cookie_manager.set("pref_sortare", sortare, key="set_sort_p", expires_at=datetime.now() + timedelta(days=365))
+
+    # 4. LOGICA DE FILTRARE/SORTARE
+    plati = mgr_plati.lista_plati.copy()
+    if f_stat == "Doar Neachitate": plati = [p for p in plati if p.status.value == "Neachitat"]
+    elif f_stat == "Doar Achitate": plati = [p for p in plati if p.status.value == "Achitat"]
+    if f_cat != "Toate": plati = [p for p in plati if p.categorie.value == f_cat]
+    
+    if sortare == "Scadență (Apropiate)": plati.sort(key=lambda x: x.scadenta)
+    elif sortare == "Scadență (Îndepărtate)": plati.sort(key=lambda x: x.scadenta, reverse=True)
+    elif sortare == "Sumă (Crescător)": plati.sort(key=lambda x: x.suma * mgr_plati.rate_valutare.get(x.valuta.value, 1))
+    elif sortare == "Sumă (Descrescător)": plati.sort(key=lambda x: x.suma * mgr_plati.rate_valutare.get(x.valuta.value, 1), reverse=True)
+    elif sortare == "Nume (A-Z)": plati.sort(key=lambda x: x.nume_plata.lower())
+    elif sortare == "Status (Neachitate primele)": plati.sort(key=lambda x: x.status.value, reverse=True)
+    elif sortare == "Status (Achitate primele)": plati.sort(key=lambda x: x.status.value)
+
+    # 5. MODAL EDITARE
+    @st.dialog("✏️ Editează Plata")
+    def modal_editare(plata_e):
+        with st.form(f"form_edit_{plata_e.id_plata}"):
+            e_nume = st.text_input("Nume", value=plata_e.nume_plata)
+            e_suma = st.number_input("Suma", value=float(plata_e.suma))
+            v_list = [v.value for v in ValutaPlata]
+            e_val = st.selectbox("Valuta", v_list, index=v_list.index(plata_e.valuta.value))
+            e_scad = st.number_input("Ziua", value=plata_e.scadenta, min_value=1, max_value=31)
+            c_list = [c.value for c in CategoriePlata]
+            e_cat = st.selectbox("Categorie", c_list, index=c_list.index(plata_e.categorie.value))
+            l_list = [l.value for l in LocatiePlata]
+            e_loc = st.selectbox("Locație", l_list, index=l_list.index(plata_e.locatie.value))
+            
+            if st.form_submit_button("Salvează Modificările", use_container_width=True):
+                mgr_plati.editeaza_plata(plata_e.id_plata, e_nume, e_suma, e_scad, CategoriePlata(e_cat), LocatiePlata(e_loc), ValutaPlata(e_val))
+                st.session_state.toast_mesaj = "Actualizat cu succes!"
+                st.rerun()
+        if st.button("🗑️ Șterge plată", type="primary", use_container_width=True):
+            mgr_plati.sterge_plata(plata_e.id_plata)
+            st.session_state.toast_mesaj = "Ștearsă!"
+            st.rerun()
+
+    # 6. AFIȘARE LISTA CARDURI
+    if not plati:
+        st.info("Nicio factură găsită.")
+    else:
+        for p in plati:
+            with st.container(border=True):
+                c_n, c_e = st.columns([4, 1])
+                c_n.markdown(f"**{p.nume_plata}** \n<small>{p.categorie.value} | {p.locatie.value}</small>", unsafe_allow_html=True)
+                if c_e.button("✏️", key=f"e_{p.id_plata}"): modal_editare(p)
+                
+                st.divider()
+                c_s, c_st, c_a = st.columns([1.5, 1.5, 1])
+                c_s.markdown(f"**{p.suma} {p.valuta.value}**")
+                
+                if p.status.value == "Achitat":
+                    c_st.success("✅ Achitat")
+                    if c_a.button("↩️", key=f"un_{p.id_plata}"):
+                        mgr_plati.actualizeaza_status(p.id_plata, StatusPlata.NEACHITAT)
+                        st.rerun()
+                else:
+                    zr = p.scadenta - ziua_azi
+                    if zr < 0: c_st.error(f"🚨 -{abs(zr)} zile")
+                    elif zr == 0: c_st.error("⚠️ Azi")
+                    else: c_st.info(f"📅 Ziua {p.scadenta}")
+                    
+                    if c_a.button("💸", key=f"py_{p.id_plata}"):
+                        mgr_plati.actualizeaza_status(p.id_plata, StatusPlata.ACHITAT)
+                        s_ron = p.suma * mgr_plati.rate_valutare.get(p.valuta.value, 1)
+                        mgr_tranz.adauga_tranzactie(s_ron, f"Factură: {p.nume_plata}", datetime.now().strftime("%d-%m-%Y"), TipTranzactie.CHELTUIALA)
+                        st.session_state.toast_mesaj = f"Achitat {s_ron:.2f} RON!"
+                        st.rerun()
 
     # Modalul pentru Editare Plăți
     @st.dialog("✏️ Editează Plata")
@@ -321,6 +424,7 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}", help="Șterge tranzacție"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
 
 
 
