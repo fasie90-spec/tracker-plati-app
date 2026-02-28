@@ -1,12 +1,22 @@
 import streamlit as st
 import os
-from enum import Enum
-from datetime import datetime
+import json
+import base64
+import hashlib 
 import csv
 import io
-import hashlib # Modulul pentru securitate si criptare
 import gspread
+from enum import Enum
+from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
+
+# --- LIBRĂRII NOI PENTRU SECURITATE ȘI COOKIES ---
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+import extra_streamlit_components as stx
+
+st.set_page_config(page_title="Monitorizare Plăți", page_icon="💳", layout="centered")
 
 # --- 1. DEFINIȚIILE ENUM ȘI CLASA DE DATE ---
 
@@ -41,21 +51,33 @@ class PlataRecurenta:
         self.locatie = locatie
         self.valuta = valuta
 
-# --- 2. SISTEMUL DE BAZĂ DE DATE ȘI AUTENTIFICARE ---
+
+# --- 2. SECURITATE: CRIPTARE ȘI COOKIES ---
 
 @st.cache_resource 
 def get_google_client():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    
-    # Acum tragem cheile din "Seiful" Streamlit, codul tau e 100% sigur pe net!
     creds_dict = dict(st.secrets["gcp_service_account"])
-    
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     return gspread.authorize(creds)
 
+@st.cache_resource
+def get_cookie_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_cookie_manager()
+
 def criptare_parola(parola):
-    # Transforma parola in cod imposibil de descifrat (ex: "1234" -> "03ac674216f3e15c...")
     return hashlib.sha256(parola.encode('utf-8')).hexdigest()
+
+def genereaza_cheie_criptare(parola, utilizator):
+    # Generăm o cheie unică și extrem de puternică folosind parola și numele ca "sare" (salt)
+    salt = utilizator.encode('utf-8')
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100000
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(parola.encode('utf-8')))
+    return Fernet(key)
 
 def autentificare(username, parola, client):
     try:
@@ -63,12 +85,10 @@ def autentificare(username, parola, client):
         records = sheet.get_all_records()
         for r in records:
             if str(r.get("Utilizator", "")).lower() == username.lower():
-                # Comparam hash-ul din baza de date cu hash-ul parolei tastate
                 if str(r.get("Parola", "")) == criptare_parola(parola):
                     return True
         return False
     except gspread.exceptions.WorksheetNotFound:
-        # Daca nu exista foaia "Conturi" in tabel, o creăm automat!
         sheet_principal = client.open("BazaDate_Plati")
         sheet_conturi = sheet_principal.add_worksheet(title="Conturi", rows=100, cols=2)
         sheet_conturi.append_row(["Utilizator", "Parola"])
@@ -78,44 +98,43 @@ def inregistrare(username, parola, client):
     username = username.lower().strip()
     try:
         sheet_principal = client.open("BazaDate_Plati")
-        
-        # Verificam daca exista foaia Conturi
         try:
             sheet_conturi = sheet_principal.worksheet("Conturi")
         except gspread.exceptions.WorksheetNotFound:
             sheet_conturi = sheet_principal.add_worksheet(title="Conturi", rows=100, cols=2)
             sheet_conturi.append_row(["Utilizator", "Parola"])
         
-        # Verificam sa nu existe deja userul asta
         records = sheet_conturi.get_all_records()
         for r in records:
             if str(r.get("Utilizator", "")).lower() == username:
                 return False, "Acest nume de utilizator este deja luat!"
         
-        # 1. Salvam userul si parola CRIPTATA
         sheet_conturi.append_row([username, criptare_parola(parola)])
         
-        # 2. Cream automat o foaie (Sheet) in Excel doar pentru datele lui!
         try:
             sheet_principal.worksheet(username)
         except gspread.exceptions.WorksheetNotFound:
-            noua_foaie = sheet_principal.add_worksheet(title=username, rows=100, cols=10)
-            noua_foaie.append_row(["ID", "Nume", "Suma", "Scadenta", "Categorie", "Modalitate de Plata", "Valuta", "Status"])
+            # Acum tabelul are doar ID și Date_Criptate pentru intimitate maximă
+            noua_foaie = sheet_principal.add_worksheet(title=username, rows=100, cols=2)
+            noua_foaie.append_row(["ID", "Date_Criptate"])
             
         return True, "Contul a fost creat cu succes!"
     except Exception as e:
         return False, f"Eroare de conexiune la baza de date: {e}"
 
 
-# --- 3. MANAGERUL (MODIFICAT PENTRU GOOGLE SHEETS) ---
+# --- 3. MANAGERUL DE PLĂȚI ---
 
 class ManagerPlati:
-    def __init__(self, utilizator, client):
+    def __init__(self, utilizator, parola_clara, client):
         self.id_curent = 1
         self.lista_plati = []
         self.utilizator = utilizator.lower()
+        self.parola_clara = parola_clara
         
-        # Conexiunea la tabelul exact al utilizatorului
+        # Instantiem modulul de criptare/decriptare
+        self.fernet = genereaza_cheie_criptare(parola_clara, self.utilizator)
+        
         self.client = client
         sheet_principal = self.client.open("BazaDate_Plati")
         self.foaie_user = sheet_principal.worksheet(self.utilizator)
@@ -164,7 +183,6 @@ class ManagerPlati:
         for plata in self.lista_plati:
             if filtru_status and plata.status.value != filtru_status.value:
                 continue
-                
             if plata.valuta.value == ValutaPlata.RON.value:
                 total += plata.suma
             elif plata.valuta.value == ValutaPlata.EUR.value:
@@ -175,11 +193,20 @@ class ManagerPlati:
                 total += plata.suma * 5.83
         return total
 
-    # Logica de GSPREAD curata
     def salveaza_date(self):
-        date_pentru_tabel = [["ID", "Nume", "Suma", "Scadenta", "Categorie", "Modalitate de Plata", "Valuta", "Status"]]
+        date_pentru_tabel = [["ID", "Date_Criptate"]]
         for p in self.lista_plati:
-            date_pentru_tabel.append([p.id_plata, p.nume_plata, float(p.suma), p.scadenta, p.categorie.value, p.locatie.value, p.valuta.value, p.status.value])
+            # Transformăm datele într-un dicționar, apoi în string
+            date_dict = {
+                "nume": p.nume_plata, "suma": p.suma, "scadenta": p.scadenta,
+                "categorie": p.categorie.value, "locatie": p.locatie.value,
+                "valuta": p.valuta.value, "status": p.status.value
+            }
+            json_str = json.dumps(date_dict)
+            
+            # Criptăm string-ul
+            sir_criptat = self.fernet.encrypt(json_str.encode('utf-8')).decode('utf-8')
+            date_pentru_tabel.append([p.id_plata, sir_criptat])
         
         try:
             self.foaie_user.clear()
@@ -191,38 +218,91 @@ class ManagerPlati:
         try:
             toate_randurile = self.foaie_user.get_all_records()
             self.lista_plati = []
-            for d in toate_randurile:
-                p = PlataRecurenta(
-                    str(d["Nume"]), float(d["Suma"]), int(d["Scadenta"]),
-                    CategoriePlata(str(d["Categorie"])), LocatiePlata(str(d["Modalitate de Plata"])),
-                    ValutaPlata(str(d["Valuta"])), StatusPlata(str(d["Status"]))
-                )
-                p.id_plata = int(d["ID"])
-                self.lista_plati.append(p)
+            
+            # Verificăm dacă fișierul este gol
+            if not toate_randurile:
+                return
+                
+            # VERIFICARE TRANZIȚIE: Suntem pe formatul vechi sau pe cel nou criptat?
+            if "Nume" in toate_randurile[0]:
+                # --- SUNTEM PE FORMATUL VECHI ---
+                st.warning("🔄 Baza ta de date este actualizată la noul format securizat. Te rugăm să aștepți câteva secunde...")
+                
+                for d in toate_randurile:
+                    p = PlataRecurenta(
+                        str(d["Nume"]), float(d["Suma"]), int(d["Scadenta"]),
+                        CategoriePlata(str(d["Categorie"])), LocatiePlata(str(d["Modalitate de Plata"])),
+                        ValutaPlata(str(d["Valuta"])), StatusPlata(str(d["Status"]))
+                    )
+                    p.id_plata = int(d["ID"])
+                    self.lista_plati.append(p)
+                
+                # Salvăm imediat datele înapoi, dar de data asta vor trece prin 
+                # funcția salveaza_date() care le va CRIPTA automat!
+                self.salveaza_date()
+                st.success("✅ Securizarea s-a încheiat cu succes! Te rugăm să reîncarci pagina (Refresh).")
+                
+            else:
+                # --- SUNTEM PE FORMATUL NOU (CRIPTAT) ---
+                for d in toate_randurile:
+                    id_plata = int(d["ID"])
+                    sir_criptat = d["Date_Criptate"]
+                    
+                    # Decriptăm șirul și îl refacem dicționar
+                    json_str = self.fernet.decrypt(sir_criptat.encode('utf-8')).decode('utf-8')
+                    date_dict = json.loads(json_str)
+                    
+                    p = PlataRecurenta(
+                        date_dict["nume"], float(date_dict["suma"]), int(date_dict["scadenta"]),
+                        CategoriePlata(date_dict["categorie"]), LocatiePlata(date_dict["locatie"]),
+                        ValutaPlata(date_dict["valuta"]), StatusPlata(date_dict["status"])
+                    )
+                    p.id_plata = id_plata
+                    self.lista_plati.append(p)
 
+            # Setăm ID-ul curent pentru următoarele plăți
             if self.lista_plati:
                 self.id_curent = max([p.id_plata for p in self.lista_plati]) + 1
+                
         except Exception as e:
-            st.error(f"Eroare detaliată la încărcare: {e}")
-
+            st.error(f"Eroare la încărcarea sau descifrarea datelor: {e}")
 
 # --- 4. INTERFAȚA WEB (STREAMLIT) ---
 
-st.set_page_config(page_title="Monitorizare Plăți", page_icon="💳", layout="centered")
 google_client = get_google_client()
 
-# --- Gatekeeper: Sistem de Login & Înregistrare ---
+# Inițializare variabile de stare
 if 'logat' not in st.session_state:
     st.session_state.logat = False
     st.session_state.user = ""
+    st.session_state.parola = ""
+if 'toast_mesaj' not in st.session_state:
+    st.session_state.toast_mesaj = None
 
+# Verificare Cookie pentru Autologin
+token_cookie = cookie_manager.get(cookie="auth_token")
+if token_cookie and not st.session_state.logat:
+    try:
+        user_c, pass_c = token_cookie.split("::")
+        if autentificare(user_c, pass_c, google_client):
+            st.session_state.logat = True
+            st.session_state.user = user_c
+            st.session_state.parola = pass_c
+            st.rerun()
+    except Exception:
+        pass
+
+# --- Afișare Toast-uri Restante (după reîncărcarea paginii) ---
+if st.session_state.toast_mesaj:
+    st.toast(st.session_state.toast_mesaj, icon="✅")
+    st.session_state.toast_mesaj = None
+
+# --- Gatekeeper: Sistem de Login & Înregistrare ---
 if not st.session_state.logat:
     st.title("🔐 Acces Aplicație")
     
-    # Cream doua tab-uri (pagini mici pe acelasi ecran)
     tab_login, tab_register = st.tabs(["🔑 Autentificare", "📝 Creare Cont Nou"])
     
-    # TAB-UL DE LOGIN
     with tab_login:
         with st.form("login_form"):
             user_login = st.text_input("Utilizator")
@@ -233,14 +313,17 @@ if not st.session_state.logat:
                 if autentificare(user_login, pass_login, google_client):
                     st.session_state.logat = True
                     st.session_state.user = user_login.lower()
+                    st.session_state.parola = pass_login
+                    
+                    # Salvăm Cookie-ul ca să nu te delogheze la refresh (expiră în 30 de zile)
+                    cookie_manager.set("auth_token", f"{user_login.lower()}::{pass_login}", key="set_auth", expires_at=datetime.now().replace(day=28))
                     st.rerun()
                 else:
                     st.error("Utilizator inexistent sau parolă incorectă!")
                     
-    # TAB-UL DE INREGISTRARE (De aici isi face ea contul)
     with tab_register:
         with st.form("register_form"):
-            st.write("Creează-ți un spațiu privat pentru facturi")
+            st.write("Creează-ți un spațiu privat și securizat pentru facturi")
             new_user = st.text_input("Alege un Nume de Utilizator")
             new_pass = st.text_input("Alege o Parolă", type="password")
             new_pass_confirm = st.text_input("Confirmă Parola", type="password")
@@ -258,13 +341,12 @@ if not st.session_state.logat:
                     else:
                         st.error(mesaj)
                         
-    st.stop() # Blocheaza restul codului daca nu e logat
+    st.stop()
 
 
 # --- Aplicatia Principala ---
 if 'manager' not in st.session_state:
-    # Aici instantiem clasa dandu-i atat userul, cat si clientul de google
-    st.session_state.manager = ManagerPlati(st.session_state.user, google_client)
+    st.session_state.manager = ManagerPlati(st.session_state.user, st.session_state.parola, google_client)
 
 manager = st.session_state.manager
 
@@ -273,6 +355,7 @@ meniu = st.sidebar.radio("Meniu", ["Vezi Plăți & Statistici", "Adaugă Plată"
 
 if meniu == "Logout":
     st.session_state.logat = False
+    cookie_manager.delete("auth_token", key="del_auth")
     del st.session_state.manager
     st.rerun()
 
@@ -296,7 +379,8 @@ if meniu == "Adaugă Plată":
                 st.error("Numele este obligatoriu!")
             else:
                 manager.adauga_plata(nume, suma, scadenta, CategoriePlata(categorie), LocatiePlata(locatie), ValutaPlata(valuta))
-                st.success(f"Plata {nume} a fost adăugată!")
+                st.session_state.toast_mesaj = f"Plata {nume} a fost adăugată!"
+                st.rerun()
 
 # --- PAGINA 2: VEZI PLĂȚI ---
 elif meniu == "Vezi Plăți & Statistici":
@@ -315,14 +399,25 @@ elif meniu == "Vezi Plăți & Statistici":
     else:
         for plata in manager.lista_plati:
             with st.container(border=True):
-                col1, col2, col3, col4 = st.columns([2, 1, 1.5, 1])
+                col1, col2, col3, col4 = st.columns([2.5, 1, 1.5, 1])
                 
-                col1.write(f"**{plata.nume_plata}** ({plata.categorie.value})")
-                col2.write(f"{plata.suma} {plata.valuta.value}")
+                # Afișare Restilizată cu HTML/CSS
+                col1.markdown(f"""
+                <div style='line-height: 1.3;'>
+                    <span style='font-size: 1.35rem; font-weight: 800; color: #2e86c1;'>{plata.nume_plata}</span><br>
+                    <span style='font-size: 0.85rem; color: gray;'>📂 {plata.categorie.value} | 📍 {plata.locatie.value}</span>
+                </div>
+                """, unsafe_allow_html=True)
                 
-               
+                col2.markdown(f"""
+                <div style='margin-top: 10px;'>
+                    <span style='font-size: 1.2rem; font-weight: 700;'>{plata.suma}</span> 
+                    <span style='font-size: 0.9rem;'>{plata.valuta.value}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
                 if plata.status.value == StatusPlata.ACHITAT.value:
-                    col3.success("ACHITAT")
+                    col3.success("✅ ACHITAT")
                 else:
                     zile_ramase = plata.scadenta - ziua_azi
                     if zile_ramase < 0:
@@ -332,18 +427,19 @@ elif meniu == "Vezi Plăți & Statistici":
                     elif 1 <= zile_ramase <= 3:
                         col3.warning(f"⏳ Încă {zile_ramase} zile")
                     else:
-                        col3.info(f"Scadență: ziua {plata.scadenta}")
+                        col3.info(f"📅 Scadență: ziua {plata.scadenta}")
 
-                
                 if plata.status.value == StatusPlata.NEACHITAT.value:
                     if col4.button("💸 Achită", key=f"pay_{plata.id_plata}"):
                         manager.actualizeaza_status(plata.id_plata, StatusPlata.ACHITAT)
+                        st.session_state.toast_mesaj = f"Ai marcat {plata.nume_plata} ca achitat!"
                         st.rerun()
                 else:
                     if col4.button("↩️ Anulează", key=f"unpay_{plata.id_plata}"):
                         manager.actualizeaza_status(plata.id_plata, StatusPlata.NEACHITAT)
                         st.rerun()
 
+                # Expander-ul de Editare
                 with st.expander("✏️ Editează / Șterge"):
                     with st.form(f"edit_form_{plata.id_plata}"):
                         e1, e2 = st.columns(2)
@@ -362,16 +458,18 @@ elif meniu == "Vezi Plăți & Statistici":
                         btn_salveaza = st.form_submit_button("Salvează Modificările")
                         if btn_salveaza:
                             manager.editeaza_plata(plata.id_plata, n_nume, n_suma, n_scadenta, CategoriePlata(n_cat), LocatiePlata(n_loc), ValutaPlata(n_valuta))
-                            st.rerun()
+                            st.session_state.toast_mesaj = "Datele au fost actualizate cu succes!"
+                            st.rerun() # Aceasta actiune ascunde si meniul de editare nativ
                             
                     if st.button("🗑️ Șterge definitiv această plată", key=f"del_{plata.id_plata}"):
                         manager.sterge_plata(plata.id_plata)
+                        st.session_state.toast_mesaj = "Plata a fost ștearsă!"
                         st.rerun()
 
 # --- PAGINA 3: RESETARE LUNARĂ & EXPORT CSV ---
 elif meniu == "Resetare Lunară & Export":
     st.header("🔄 Închidere Lună & Export")
-    st.write("Când se termină luna, urmează acești 2 pași pentru a-ți păstra istoricul și a reseta aplicația pentru luna nouă.")
+    st.write("Deși pe Google Sheets datele sunt criptate, aici poți descărca istoricul tău perfect lizibil în format Excel (CSV).")
     
     output = io.StringIO()
     writer = csv.writer(output)
@@ -402,8 +500,5 @@ elif meniu == "Resetare Lunară & Export":
     st.warning("Atenție: Această acțiune va reseta toate plățile înapoi la 'NEACHITAT'.")
     if st.button("🔄 Resetează Statusurile"):
         manager.actualizeaza_luna_noua()
-        st.success("Toate statusurile au fost resetate! Ești gata pentru luna viitoare.")
-        st.rerun()  # <--- ADAUGĂ LINIA ASTA
-
-
-
+        st.session_state.toast_mesaj = "Toate statusurile au fost resetate!"
+        st.rerun()
