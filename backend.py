@@ -167,6 +167,11 @@ class ManagerPlati:
             total += p.suma * self.rate_valutare.get(p.valuta.value, 1)
         return total
 
+    def actualizeaza_luna_noua(self):
+        for p in self.lista_plati:
+            p.status = StatusPlata.NEACHITAT
+        self.salveaza_date()
+    
     def salveaza_date(self):
         date = [["ID", "Date_Criptate"]]
         for p in self.lista_plati:
@@ -252,3 +257,4 @@ class ManagerTranzactii:
             except Exception: pass
 
         if self.lista_tranzactii: self.id_curent = max([t.id_tranzactie for t in self.lista_tranzactii]) + 1
+
