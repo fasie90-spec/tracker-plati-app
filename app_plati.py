@@ -383,6 +383,19 @@ if meniu == "Adaugă Plată":
                 st.session_state.toast_mesaj = f"Plata {nume} a fost adăugată!"
                 st.rerun()
 
+E perfect normal să te încurci aici! Când adaugi logica de filtrare, practic trebuie să interceptezi lista de plăți înainte ca aplicația să înceapă să o deseneze pe ecran (înainte de acel for plata in...).
+
+Ca viitor Python Developer, e important să vizualizezi fluxul datelor:
+
+Iei datele brute (manager.lista_plati).
+
+Le treci printr-o "sită" (filtrele și sortarea).
+
+Rezultatul (plati_afisate) îl trimiți către interfața grafică să fie afișat.
+
+Pentru a face lucrurile super clare, înlocuiește complet toată PAGINA 2 a ta cu codul de mai jos. Am integrat eu filtrele exact unde trebuie:
+
+Python
 # --- PAGINA 2: VEZI PLĂȚI ---
 elif meniu == "Vezi Plăți & Statistici":
     st.header("📊 Situația Ta Financiară")
@@ -395,14 +408,55 @@ elif meniu == "Vezi Plăți & Statistici":
     st.divider()
     ziua_azi = datetime.now().day
 
-    
+    # --- ZONA NOUĂ DE FILTRARE ȘI ORDONARE ---
+    with st.expander("🔎 Filtrare și Ordonare", expanded=False):
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            filtru_status = st.selectbox("Status", ["Toate", "Doar Neachitate", "Doar Achitate"])
+        with f2:
+            optiuni_cat = ["Toate"] + [c.value for c in CategoriePlata]
+            filtru_cat = st.selectbox("Categorie", optiuni_cat)
+        with f3:
+            optiuni_sortare = [
+                "Scadență (Apropiate primele)", 
+                "Scadență (Îndepărtate primele)", 
+                "Sumă (Crescător)", 
+                "Sumă (Descrescător)", 
+                "Nume (A-Z)"
+            ]
+            sortare = st.selectbox("Ordonare după", optiuni_sortare)
 
-    if not manager.lista_plati:
-        st.info("Nu ai facturi de plată.")
+    # 1. Copiem lista originală pentru a nu o strica
+    plati_afisate = manager.lista_plati.copy()
+
+    # 2. Aplicăm Filtrarea
+    if filtru_status == "Doar Neachitate":
+        plati_afisate = [p for p in plati_afisate if p.status.value == StatusPlata.NEACHITAT.value]
+    elif filtru_status == "Doar Achitate":
+        plati_afisate = [p for p in plati_afisate if p.status.value == StatusPlata.ACHITAT.value]
+
+    if filtru_cat != "Toate":
+        plati_afisate = [p for p in plati_afisate if p.categorie.value == filtru_cat]
+
+    # 3. Aplicăm Sortarea
+    if sortare == "Scadență (Apropiate primele)":
+        plati_afisate.sort(key=lambda x: x.scadenta)
+    elif sortare == "Scadență (Îndepărtate primele)":
+        plati_afisate.sort(key=lambda x: x.scadenta, reverse=True)
+    elif sortare == "Sumă (Crescător)":
+        plati_afisate.sort(key=lambda x: x.suma)
+    elif sortare == "Sumă (Descrescător)":
+        plati_afisate.sort(key=lambda x: x.suma, reverse=True)
+    elif sortare == "Nume (A-Z)":
+        plati_afisate.sort(key=lambda x: x.nume_plata.lower())
+    # ------------------------------------------
+
+    # --- AFIȘAREA PLĂȚILOR (ACUM FOLOSIM plati_afisate ÎN LOC DE manager.lista_plati) ---
+    if not plati_afisate:
+        st.info("Nu ai facturi care să corespundă acestor criterii.")
     else:
-        for plata in manager.lista_plati:
+        for plata in plati_afisate:
             with st.container(border=True):
-                # Am adăugat o coloană mică (col_edit) fix lângă nume
                 col1, col_edit, col2, col3, col4 = st.columns([2, 0.5, 1, 1.5, 1])
                 
                 col1.markdown(f"""
@@ -412,7 +466,6 @@ elif meniu == "Vezi Plăți & Statistici":
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # --- AICI E NOUL BUTON DE EDITARE ---
                 with col_edit:
                     with st.popover("✏️"):
                         st.markdown(f"**Editează {plata.nume_plata}**")
@@ -437,12 +490,10 @@ elif meniu == "Vezi Plăți & Statistici":
                                 st.session_state.toast_mesaj = "Datele au fost actualizate cu succes!"
                                 st.rerun()
                                 
-                        # Butonul de ștergere e separat, sub formular
                         if st.button("🗑️ Șterge plată", key=f"del_{plata.id_plata}", type="primary", use_container_width=True):
                             manager.sterge_plata(plata.id_plata)
                             st.session_state.toast_mesaj = "Plata a fost ștearsă!"
                             st.rerun()
-                # ------------------------------------
                 
                 col2.markdown(f"""
                 <div style='margin-top: 10px;'>
@@ -510,6 +561,7 @@ elif meniu == "Resetare Lunară & Export":
         manager.actualizeaza_luna_noua()
         st.session_state.toast_mesaj = "Toate statusurile au fost resetate!"
         st.rerun()
+
 
 
 
