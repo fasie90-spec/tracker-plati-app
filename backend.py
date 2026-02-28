@@ -227,7 +227,9 @@ class ManagerPlati:
 class ManagerTranzactii:
     def __init__(self, utilizator, parola_clara, client):
         self.id_curent = 1
+        self.target_economii = 0.0 # <-- ADĂUGATĂ: Stochează target-ul în memorie
         self.lista_tranzactii = []
+        # ... restul codului rămâne la fel
         self.utilizator = utilizator.lower()
         self.fernet = genereaza_cheie_criptare(parola_clara, self.utilizator)
         sheet_principal = client.open("BazaDate_Plati")
@@ -244,6 +246,10 @@ class ManagerTranzactii:
             self.foaie = sheet_principal.add_worksheet(title=nume_foaie, rows=100, cols=2)
             self.foaie.append_row(["ID", "Date_Criptate"])
         self.incarca_date()
+
+    def set_target_economii(self, nou_target):
+        self.target_economii = float(nou_target)
+        self.salveaza_date() # Salvăm instant în Google Sheets
 
     def adauga_tranzactie(self, suma, categorie, data, tip):
         t = Tranzactie(self.id_curent, suma, categorie, data, tip)
@@ -269,10 +275,18 @@ class ManagerTranzactii:
 
     def salveaza_date(self):
         date = [["ID", "Date_Criptate"]]
+        
+        # 1. Salvăm Target-ul de economii cu ID-ul special 0
+        dict_target = {"suma": self.target_economii, "categorie": "TARGET", "data": "", "tip": TipTranzactie.ECONOMII.value}
+        criptat_target = self.fernet.encrypt(json.dumps(dict_target).encode('utf-8')).decode('utf-8')
+        date.append([0, criptat_target])
+        
+        # 2. Salvăm restul tranzacțiilor normale
         for t in self.lista_tranzactii:
             dict_date = {"suma": t.suma, "categorie": t.categorie, "data": t.data, "tip": t.tip.value}
             criptat = self.fernet.encrypt(json.dumps(dict_date).encode('utf-8')).decode('utf-8')
             date.append([t.id_tranzactie, criptat])
+            
         self.foaie.clear()
         self.foaie.update(values=date, range_name="A1")
 
@@ -283,6 +297,12 @@ class ManagerTranzactii:
         for d in randuri:
             try:
                 dict_date = json.loads(self.fernet.decrypt(d["Date_Criptate"].encode('utf-8')).decode('utf-8'))
+                
+                # Dacă dăm de ID-ul 0, știm că este setarea de target, nu o tranzacție!
+                if int(d["ID"]) == 0:
+                    self.target_economii = float(dict_date["suma"])
+                    continue
+                    
                 t = Tranzactie(int(d["ID"]), float(dict_date["suma"]), dict_date["categorie"], dict_date["data"], dict_date["tip"])
                 self.lista_tranzactii.append(t)
             except Exception:
