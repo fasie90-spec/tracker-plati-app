@@ -119,21 +119,17 @@ if meniu == "📊 Dashboard Analytics":
     
     st.divider()
 
-    # --- SECTIUNE ECONOMII (SEIF PERSONALIZAT) ---
-    target_key = f"target_eco_{st.session_state.user}"
-    # Caută instant în sesiune; dacă nu e acolo, ia-l din cookie
-    target_eco = st.session_state.get(target_key, cookie_manager.get(target_key))
+    # --- SECTIUNE ECONOMII (SEIF ÎN CLOUD) ---
+    target_val = mgr_tranz.target_economii # Acum citim direct din backend
     economii_totale = mgr_tranz.calculeaza_economii_totale()
 
     st.subheader("🏦 Seiful Meu de Economii")
-    if target_eco and float(target_eco) > 0:
-        target_val = float(target_eco)
+    if target_val > 0:
         col_ec1, col_ec2 = st.columns([1, 2])
         col_ec1.metric("Total în Seif", f"{economii_totale:.2f} RON", delta="💰")
         
         with col_ec2:
             st.write(f"**Target Setat: {target_val:.2f} RON**")
-            # Procentul nu trece de 100% ca să nu strice bara vizual
             procent_ec = min(int((economii_totale / target_val) * 100), 100)
             emoji_eco = "🌱" if procent_ec < 50 else "🌿" if procent_ec < 100 else "🌳"
             
@@ -369,22 +365,19 @@ elif meniu == "💰 Portofel (Cashflow)":
                 st.session_state.toast_mesaj = f"{t_tip} înregistrat!"
                 st.rerun()
     # --- GESTIONARE SEIF ---
-    target_key = f"target_eco_{st.session_state.user}"
-    target_actual = st.session_state.get(target_key, cookie_manager.get(target_key))
-    target_actual = float(target_actual) if target_actual else 0.0
+    target_actual = mgr_tranz.target_economii # Citim direct din backend
     
     with st.expander("🏦 Gestionează Seiful de Economii", expanded=False):
         st.write(f"**Bani actuali în Seif:** {mgr_tranz.calculeaza_economii_totale():.2f} RON")
         c_set, c_get = st.columns(2)
         
         with c_set:
-            nou_target = st.number_input("Setează Target (RON)", min_value=0.0, value=target_actual, step=100.0)
+            nou_target = st.number_input("Setează Target (RON)", min_value=0.0, value=float(target_actual), step=100.0)
             if st.button("💾 Salvează Target", use_container_width=True):
-                # 1. Oglindim instant în memorie pentru viteză
-                st.session_state[target_key] = str(nou_target)
-                # 2. Trimitem cookie-ul către browser (fără să mai dăm rerun ca să aibă timp să-l scrie)
-                cookie_manager.set(target_key, str(nou_target), key="set_target", expires_at=datetime.now() + timedelta(days=365))
-                st.toast("Obiectivul a fost salvat cu succes!", icon="✅")
+                # Trimitem direct în Google Sheets!
+                mgr_tranz.set_target_economii(nou_target)
+                st.toast("Obiectivul a fost salvat în Cloud! ☁️", icon="✅")
+                st.rerun()
                 
         with c_get:
             suma_ret = st.number_input("Suma de retras (RON)", min_value=0.0, step=50.0)
@@ -394,9 +387,8 @@ elif meniu == "💰 Portofel (Cashflow)":
                 elif suma_ret > mgr_tranz.calculeaza_economii_totale():
                     st.error("Fonduri insuficiente în seif!")
                 else:
-                    # Secretul matematic: Tranzacție de economii cu sumă negativă
                     mgr_tranz.adauga_tranzactie(-suma_ret, "Retragere din Seif", datetime.now().strftime("%d-%m-%Y"), TipTranzactie.ECONOMII)
-                    st.session_state.toast_mesaj = f"Ai retras {suma_ret:.2f} RON. Banii s-au întors în portofel!"
+                    st.toast(f"Ai retras {suma_ret:.2f} RON. Banii s-au întors în portofel!", icon="✅")
                     st.rerun()
     
     st.subheader("Istoric Tranzacții")
@@ -427,6 +419,7 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
 
 
 
