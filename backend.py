@@ -168,8 +168,11 @@ class ManagerPlati:
         return total
 
     def actualizeaza_luna_noua(self):
+        # Resetăm statusul fiecărei plăți din listă
         for p in self.lista_plati:
             p.status = StatusPlata.NEACHITAT
+        
+        # Salvăm lista modificată în Google Sheets
         self.salveaza_date()
     
     def salveaza_date(self):
@@ -257,4 +260,5 @@ class ManagerTranzactii:
             except Exception: pass
 
         if self.lista_tranzactii: self.id_curent = max([t.id_tranzactie for t in self.lista_tranzactii]) + 1
+
 
