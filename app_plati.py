@@ -77,20 +77,29 @@ mgr_plati = st.session_state.manager_plati
 mgr_tranz = st.session_state.manager_tranz
 
 # --- MENIU LATERAL ---
+# --- MENIU LATERAL (Doar Profil & Info) ---
 st.sidebar.title(f"Salut, {st.session_state.user.capitalize()}! 🚀")
 st.sidebar.info(f"💶 Curs actualizat: 1 EUR = {mgr_plati.rate_valutare['EUR']:.2f} RON")
 
-meniu = st.sidebar.radio("Meniu Principal", [
-    "📊 Dashboard Analytics", 
-    "💳 Facturi & Scadențe", 
-    "💰 Portofel (Cashflow)", 
-    "Logout"
-])
-
-if meniu == "Logout":
+# Am transformat Logout-ul intr-un buton in sidebar
+if st.sidebar.button("🚪 Deconectare (Logout)", use_container_width=True):
     st.session_state.logat = False
     cookie_manager.delete("auth_token", key="del_auth")
     st.rerun()
+
+# --- MENIU PRINCIPAL (TOP BAR - MOBILE FRIENDLY) ---
+# Punem meniul orizontal direct in pagina principala
+meniu = st.radio(
+    "Meniu Navigare", 
+    [
+        "📊 Dashboard Analytics", 
+        "💳 Facturi & Scadențe", 
+        "💰 Portofel (Cashflow)"
+    ], 
+    horizontal=True, 
+    label_visibility="collapsed"
+)
+st.divider() # O linie de separare eleganta sub meniu
 
 # ==========================================
 # 📊 PAGINA 1: DASHBOARD & ANALYTICS
@@ -359,5 +368,6 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
 
 
