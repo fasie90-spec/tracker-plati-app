@@ -141,28 +141,30 @@ if meniu == "📊 Dashboard Analytics":
         st.write("Nu există date suficiente pentru grafic.")
 
 # ==========================================
-# 💳 PAGINA 2: FACTURI (Aplicația ta veche, restilizată)
+# 💳 PAGINA 2: FACTURI
 # ==========================================
 elif meniu == "💳 Facturi & Scadențe":
     st.header("💳 Gestionare Facturi Recurente")
-    ziua_azi = datetime.now().day
-
-    with st.expander("➕ Adaugă Factură Nouă"):
-        with st.form("form_adaugare_plata"):
-            col1, col2 = st.columns(2)
-            n_nume = col1.text_input("Nume Plată")
-            n_suma = col1.number_input("Suma", min_value=0.0, step=10.0)
-            n_valuta = col1.selectbox("Valuta", [v.value for v in ValutaPlata])
-            n_scadenta = col2.number_input("Ziua (1-31)", min_value=1, max_value=31)
-            n_cat = col2.selectbox("Categorie", [c.value for c in CategoriePlata])
-            n_loc = col2.selectbox("Locație", [l.value for l in LocatiePlata])
-            
-            if st.form_submit_button("Salvează Factura", use_container_width=True):
-                mgr_plati.adauga_plata(n_nume, n_suma, n_scadenta, CategoriePlata(n_cat), LocatiePlata(n_loc), ValutaPlata(n_valuta))
-                st.session_state.toast_mesaj = "Factură adăugată!"
-                st.rerun()
-
+    
+    # --- BARA DE PROGRES (ADAUGATĂ AICI) ---
+    total_facturi = mgr_plati.get_total_ron()
+    total_achitat = mgr_plati.get_total_ron(StatusPlata.ACHITAT)
+    
+    if total_facturi > 0:
+        procent = int((total_achitat / total_facturi) * 100)
+        # Alegem o culoare dinamică în funcție de progres
+        culoare = "🔍" if procent < 50 else "⚡" if procent < 100 else "✅"
+        
+        st.write(f"**Progres Lună Curentă:** {procent}% achitat")
+        st.progress(procent / 100)
+        st.caption(f"{culoare} Ai achitat {total_achitat:.2f} RON dintr-un total de {total_facturi:.2f} RON")
+    else:
+        st.info("Adaugă prima ta factură pentru a vedea progresul.")
+    
     st.divider()
+    
+    # Restul codului tău (ziua_azi, expander-ul de adăugare, etc.) rămâne la fel...
+    ziua_azi = datetime.now().day
 
     # Modalul pentru Editare Plăți
     @st.dialog("✏️ Editează Plata")
@@ -310,5 +312,6 @@ elif meniu == "💰 Portofel (Cashflow)":
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}", help="Șterge tranzacție"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
 
 
