@@ -404,15 +404,15 @@ elif meniu == "Vezi Plăți & Statistici":
             optiuni_cat = ["Toate"] + [c.value for c in CategoriePlata]
             filtru_cat = st.selectbox("Categorie", optiuni_cat)
         with f3:
-        optiuni_sortare = [
-            "Scadență (Apropiate primele)", 
-            "Scadență (Îndepărtate primele)", 
-            "Sumă (Crescător)", 
-            "Sumă (Descrescător)", 
-            "Nume (A-Z)",
-            "Status (Achitate primele)",
-            "Status (Neachitate primele)"
-        ]
+            optiuni_sortare = [
+                "Scadență (Apropiate primele)", 
+                "Scadență (Îndepărtate primele)", 
+                "Sumă (Crescător)", 
+                "Sumă (Descrescător)", 
+                "Nume (A-Z)",
+                "Status (Achitate primele)",
+                "Status (Neachitate primele)"
+            ]
         
         # 1. Citim preferința din browser (dacă există), altfel punem default prima opțiune
         sortare_salvata = cookie_manager.get("pref_sortare")
@@ -576,6 +576,7 @@ elif meniu == "Resetare Lunară & Export":
         manager.actualizeaza_luna_noua()
         st.session_state.toast_mesaj = "Toate statusurile au fost resetate!"
         st.rerun()
+
 
 
 
