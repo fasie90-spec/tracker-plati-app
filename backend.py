@@ -196,12 +196,20 @@ class ManagerTranzactii:
         self.utilizator = utilizator.lower()
         self.fernet = genereaza_cheie_criptare(parola_clara, self.utilizator)
         
-        # Verificăm dacă foaia există, altfel o creăm pe loc
         sheet_principal = client.open("BazaDate_Plati")
         nume_foaie = f"{self.utilizator}_tranzactii"
-        try:
-            self.foaie = sheet_principal.worksheet(nume_foaie)
-        except gspread.exceptions.WorksheetNotFound:
+        
+        # Căutare manuală și sigură (ignorând litere mari/mici)
+        toate_foile = sheet_principal.worksheets()
+        foaie_gasita = None
+        for f in toate_foile:
+            if f.title.lower() == nume_foaie.lower():
+                foaie_gasita = f
+                break
+                
+        if foaie_gasita:
+            self.foaie = foaie_gasita
+        else:
             self.foaie = sheet_principal.add_worksheet(title=nume_foaie, rows=100, cols=2)
             self.foaie.append_row(["ID", "Date_Criptate"])
             
@@ -242,4 +250,5 @@ class ManagerTranzactii:
                 t = Tranzactie(int(d["ID"]), float(dict_date["suma"]), dict_date["categorie"], dict_date["data"], TipTranzactie(dict_date["tip"]))
                 self.lista_tranzactii.append(t)
             except Exception: pass
+
         if self.lista_tranzactii: self.id_curent = max([t.id_tranzactie for t in self.lista_tranzactii]) + 1
