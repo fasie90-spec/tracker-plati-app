@@ -61,11 +61,8 @@ def get_google_client():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     return gspread.authorize(creds)
 
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
-
-cookie_manager = get_cookie_manager()
+# Inițializăm managerul de cookies fără cache, direct în script
+cookie_manager = stx.CookieManager()
 
 def criptare_parola(parola):
     return hashlib.sha256(parola.encode('utf-8')).hexdigest()
@@ -502,3 +499,4 @@ elif meniu == "Resetare Lunară & Export":
         manager.actualizeaza_luna_noua()
         st.session_state.toast_mesaj = "Toate statusurile au fost resetate!"
         st.rerun()
+
