@@ -119,23 +119,27 @@ if meniu == "📊 Dashboard Analytics":
     
     st.divider()
 
-    # --- SECTIUNE ECONOMII (500 RON Target) ---
-    luna_curenta = datetime.now().month
-    economii_luna_asta = sum(t.suma for t in mgr_tranz.lista_tranzactii 
-                             if t.tip == TipTranzactie.ECONOMII and 
-                             datetime.strptime(t.data, "%d-%m-%Y").month == luna_curenta)
-    
+    # --- SECTIUNE ECONOMII (SEIF PERSONALIZAT) ---
+    target_key = f"target_eco_{st.session_state.user}"
+    target_eco = cookie_manager.get(target_key)
     economii_totale = mgr_tranz.calculeaza_economii_totale()
 
-    col_ec1, col_ec2 = st.columns([1, 2])
-    col_ec1.metric("Total în Seif", f"{economii_totale:.2f} RON", delta="💰")
-    
-    with col_ec2:
-        st.write("**Target Lunar Economii (500 RON)**")
-        procent_ec = min(int((economii_luna_asta / 500) * 100), 100)
-        st.progress(procent_ec / 100)
-        st.caption(f"Ai pus deoparte {economii_luna_asta:.2f} RON luna aceasta.")
-    
+    st.subheader("🏦 Seiful Meu de Economii")
+    if target_eco and float(target_eco) > 0:
+        target_val = float(target_eco)
+        col_ec1, col_ec2 = st.columns([1, 2])
+        col_ec1.metric("Total în Seif", f"{economii_totale:.2f} RON", delta="💰")
+        
+        with col_ec2:
+            st.write(f"**Target Setat: {target_val:.2f} RON**")
+            # Procentul nu trece de 100% ca să nu strice bara vizual
+            procent_ec = min(int((economii_totale / target_val) * 100), 100)
+            emoji_eco = "🌱" if procent_ec < 50 else "🌿" if procent_ec < 100 else "🌳"
+            
+            st.progress(procent_ec / 100, text=f"{emoji_eco} Ai strâns {economii_totale:.2f} RON din obiectivul tău.")
+    else:
+        st.info("💡 Nu ai setat încă un target pentru economii. Navighează la '💰 Portofel' pentru a-ți deschide un Seif!")
+
     st.divider()
     
     # 🟩 BARA DE PROGRES PENTRU FACTURI
@@ -351,7 +355,35 @@ elif meniu == "💰 Portofel (Cashflow)":
                 mgr_tranz.adauga_tranzactie(t_suma, t_cat, data_azi, tip_map[t_tip])
                 st.session_state.toast_mesaj = f"{t_tip} înregistrat!"
                 st.rerun()
-
+    # --- GESTIONARE SEIF ---
+    target_key = f"target_eco_{st.session_state.user}"
+    target_actual = cookie_manager.get(target_key)
+    target_actual = float(target_actual) if target_actual else 0.0
+    
+    with st.expander("🏦 Gestionează Seiful de Economii", expanded=False):
+        st.write(f"**Bani actuali în Seif:** {mgr_tranz.calculeaza_economii_totale():.2f} RON")
+        c_set, c_get = st.columns(2)
+        
+        with c_set:
+            nou_target = st.number_input("Setează Target (RON)", min_value=0.0, value=target_actual, step=100.0)
+            if st.button("💾 Salvează Target", use_container_width=True):
+                cookie_manager.set(target_key, str(nou_target), key="set_target", expires_at=datetime.now() + timedelta(days=365))
+                st.session_state.toast_mesaj = "Obiectivul de economii a fost actualizat!"
+                st.rerun()
+                
+        with c_get:
+            suma_ret = st.number_input("Suma de retras (RON)", min_value=0.0, step=50.0)
+            if st.button("💸 Retrage din Seif", use_container_width=True):
+                if suma_ret <= 0:
+                    st.error("Suma trebuie să fie mai mare ca 0.")
+                elif suma_ret > mgr_tranz.calculeaza_economii_totale():
+                    st.error("Fonduri insuficiente în seif!")
+                else:
+                    # Secretul matematic: Tranzacție de economii cu sumă negativă
+                    mgr_tranz.adauga_tranzactie(-suma_ret, "Retragere din Seif", datetime.now().strftime("%d-%m-%Y"), TipTranzactie.ECONOMII)
+                    st.session_state.toast_mesaj = f"Ai retras {suma_ret:.2f} RON. Banii s-au întors în portofel!"
+                    st.rerun()
+    
     st.subheader("Istoric Tranzacții")
     if not mgr_tranz.lista_tranzactii:
         st.info("Nicio tranzacție.")
@@ -359,15 +391,28 @@ elif meniu == "💰 Portofel (Cashflow)":
         for t in reversed(mgr_tranz.lista_tranzactii):
             with st.container(border=True):
                 col_i, col_d = st.columns([4, 1])
-                culoare = "green" if t.tip == TipTranzactie.VENIT else "blue" if t.tip == TipTranzactie.ECONOMII else "red"
-                semn = "+" if t.tip == TipTranzactie.VENIT else "🔒" if t.tip == TipTranzactie.ECONOMII else "-"
+                
+                # Logică inteligentă pentru culori și semne
+                if t.tip == TipTranzactie.VENIT:
+                    culoare, semn = "green", "+"
+                elif t.tip == TipTranzactie.ECONOMII:
+                    if t.suma >= 0:
+                        culoare, semn = "blue", "🔒"
+                    else:
+                        culoare, semn = "green", "🔓+" # Lacăt deschis, banii intră în portofel
+                else:
+                    culoare, semn = "red", "-"
+                
+                # Folosim abs() ca să nu afișeze lucruri de genul "+-200"
+                valoare_absoluta = abs(t.suma)
                 
                 col_i.markdown(f"**[{t.tip.value}] {t.categorie}** <br> <span style='color: gray; font-size: 0.8em;'>{t.data}</span>", unsafe_allow_html=True)
-                col_d.markdown(f"<div style='text-align:right; font-weight: bold; color: {culoare};'>{semn}{t.suma}</div>", unsafe_allow_html=True)
+                col_d.markdown(f"<div style='text-align:right; font-weight: bold; color: {culoare};'>{semn}{valoare_absoluta}</div>", unsafe_allow_html=True)
                 
                 if col_d.button("🗑️", key=f"del_t_{t.id_tranzactie}"):
                     mgr_tranz.sterge_tranzactie(t.id_tranzactie)
                     st.rerun()
+
 
 
 
