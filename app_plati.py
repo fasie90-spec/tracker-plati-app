@@ -160,11 +160,11 @@ if meniu == "📊 Dashboard Analytics":
     st.subheader("🍕 Distribuția Cheltuielilor Reale")
     date_grafic = {"Categorie": [], "Suma": []}
     
-    # 1. Extragem facturile ACHITATE (Acum fără prefixul urât)
+    # 1. Extragem facturile ACHITATE (cu prefixul pus la loc pentru delimitare)
     for p in mgr_plati.lista_plati:
         if p.status.value == "Achitat":
             suma_ron = p.suma * mgr_plati.rate_valutare.get(p.valuta.value, 1)
-            date_grafic["Categorie"].append(p.categorie) # <-- Am scos "Factură: "
+            date_grafic["Categorie"].append(f"Factură: {p.categorie}")
             date_grafic["Suma"].append(suma_ron)
             
     # 2. Extragem cheltuielile zilnice din Portofel (doar luna curentă)
@@ -176,13 +176,14 @@ if meniu == "📊 Dashboard Analytics":
             luna_t = luna_curenta # Fallback de siguranță
             
         if t.tip == TipTranzactie.CHELTUIALA and luna_t == luna_curenta:
-            # Aici filtrăm corect ca să nu dublăm banii dați pe facturi
-            if not str(t.categorie).startswith("Factură: "):
+            # Nu dublăm facturile care s-au scăzut deja automat în portofel
+            if not t.categorie.startswith("Plată factură: "):
                 date_grafic["Categorie"].append(t.categorie)
                 date_grafic["Suma"].append(t.suma)
         
     if date_grafic["Suma"]:
         df = pd.DataFrame(date_grafic).groupby("Categorie")["Suma"].sum().reset_index()
+        # Sortăm descrescător ca felia cea mai mare să fie prima
         df = df.sort_values(by="Suma", ascending=False)
         
         fig = px.pie(df, values='Suma', names='Categorie', hole=0.6, 
